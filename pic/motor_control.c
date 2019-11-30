@@ -68,13 +68,15 @@
 #define BUFF_NEW_WORD 0
 #define BUFF_CON_WORD 1
 #define BUFF_OVERFLOW 2
+#define BUFF_ERROR 3
 char buff[BUFF_SIZE];
 int char_pos;
 int state;
+int rec_value;
 void __interrupt(high_priority) high_isr () {
     while(!PIR1bits.RCIF);
     /* restart a word */
-    if (state == BUFF_NEW_WORD || state == BUFF_OVERFLOW) {
+    if (state == BUFF_NEW_WORD || state == BUFF_OVERFLOW || state == BUFF_ERROR) {
         char_pos = 0;
         state = BUFF_CON_WORD;
     }
@@ -85,6 +87,27 @@ void __interrupt(high_priority) high_isr () {
     /* end character */
     if (buff[char_pos++] == '&') {
         state = BUFF_NEW_WORD;
+        char isNegative = 0;
+        char_pos = 0;
+        if (buff[0] == '-') {
+            isNegative = 1;
+            char_pos++;
+        }
+        
+        rec_value = 0;
+        while (buff[char_pos] != 0 && buff[char_pos] != '&') {
+            char temp = buff[char_pos] - '0';
+            if (temp < 0 || temp > 9) {
+                state = BUFF_ERROR;
+                rec_value = 0;
+                break;
+            }
+            rec_value = rec_value * 10 + temp;
+            ++char_pos;
+        }
+        
+        if (isNegative)
+            rec_value = -rec_value;
     }
     
     /* buffer overflow */
@@ -137,6 +160,7 @@ void main(void) {
     RCREG = 0;
     char_pos = 0;
     state = BUFF_NEW_WORD;
+    rec_value = 0;
     while(1);
     return;
 }
