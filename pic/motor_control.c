@@ -108,6 +108,8 @@ void __interrupt(high_priority) high_isr () {
         
         if (isNegative)
             rec_value = -rec_value;
+        
+        CCPR1L = rec_value % 256;
     }
     
     /* buffer overflow */
@@ -139,9 +141,9 @@ void main(void) {
     //TXIE = 1;
     
     /*
-     * Oscillator: 4MHz
+     * Oscillator: 500kHz
      */
-    OSCCON = 0b01101100;
+    OSCCON = 0b00111100;
     
     /* serial port enable */
     RCSTAbits.SPEN = 1;
@@ -151,16 +153,42 @@ void main(void) {
      */
     TXSTAbits.SYNC = 0;
     TXSTAbits.BRGH = 1;
-    BAUDCONbits.BRG16 = 0;
+    BAUDCONbits.BRG16 = 1;
     SPBRGH = 0;
-    SPBRG = 25;
+    SPBRG = 12;
     
+    /* variable about receiving message from bluetooth */
     TRISD = 0;
     LATD = 1;
     RCREG = 0;
     char_pos = 0;
     state = BUFF_NEW_WORD;
     rec_value = 0;
+    
+    /* timer2 prescaler 1:16 */
+    T2CON = 0b01111111;
+    TMR2 = 0;
+    
+    /*
+     * single output P1A
+     * DC1B : 0 0
+     * PWM mode P1A, P1C active-high
+     */
+    CCP1CON = 0b00001100;
+    
+    /*
+     * Tosc = 1 / 500 kHz = 2 * 10^-6
+     * PWM = (155 + 1) * 4 * Tosc * prescaler
+     *     = 19.968 ms
+     */
+    PR2 = 155;
+    
+    /* P1A: RC2 output */
+    TRISCbits.RC2 = 0;
+    
+    /* motor degree */
+    CCPR1L = 0;
+    
     while(1);
     return;
 }
