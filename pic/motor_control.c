@@ -1,8 +1,9 @@
 /*
- * File:   bluetooth.c
- * Author: jackh
- *
- * Created on 2019?11?30?, ?? 11:49
+ * INT1: RD2
+ * INT2: RD3
+ * ENA: RC2 / P1A
+ * 
+ * variable resistance: RA0 / AN0
  */
 
 #include <xc.h>
@@ -14,7 +15,7 @@
 
 // CONFIG2L
 #pragma config PWRT = OFF       // Power-up Timer Enable bit (PWRT disabled)
-#pragma config BOREN = OFF       // Brown-out Reset Enable bits (Brown-out Reset enabled and controlled by software (SBOREN is enabled))
+#pragma config BOREN = ON       // Brown-out Reset Enable bits (Brown-out Reset enabled and controlled by software (SBOREN is enabled))
 //#pragma config BOREN = SBORDIS       // Brown-out Reset enabled in hardware only (SBOREN is disabled)
 #pragma config BORV = 3         // Brown Out Reset Voltage bits (Minimum setting)
 
@@ -64,61 +65,37 @@
 // CONFIG7H
 #pragma config EBTRB = OFF      // Boot Block Table Read Protection bit (Boot block (000000-0007FFh) not protected from table reads executed in other blocks)
 
-#define BUFF_SIZE 20
-#define BUFF_NEW_WORD 0
-#define BUFF_CON_WORD 1
-#define BUFF_OVERFLOW 2
-#define BUFF_ERROR 3
-char buff[BUFF_SIZE];
-int char_pos;
-int state;
-int rec_value;
+int value;
+int power;
 void __interrupt(high_priority) high_isr () {
-    while(!PIR1bits.RCIF);
-    /* restart a word */
-    if (state == BUFF_NEW_WORD || state == BUFF_OVERFLOW || state == BUFF_ERROR) {
-        char_pos = 0;
-        state = BUFF_CON_WORD;
-    }
-    
-    /* get char from bluetooth */
-    buff[char_pos] = RCREG;
-    
-    /* end character */
-    if (buff[char_pos++] == '&') {
-        state = BUFF_NEW_WORD;
-        char isNegative = 0;
-        char_pos = 0;
-        if (buff[0] == '-') {
-            isNegative = 1;
-            char_pos++;
+    if (PIE1bits.ADIE && PIR1bits.ADIF) {
+        value = ADRESL;
+        value += ADRESH << 8;
+        
+        if (value > 1023) value = 1023;
+        if (value < 0) value = 0;
+        
+        power = value - 511;
+        if (power == 0) {
+            LATDbits.LD3 = 0;
+            LATDbits.LD2 = 0;
+        }
+        else if (power < 0) {
+            LATDbits.LD3 = 0;
+            LATDbits.LD2 = 1;
+            power = -power;
+            
+            CCPR1L = power / 2;
+        }
+        else {
+            LATDbits.LD3 = 1;
+            LATDbits.LD2 = 0;
+            CCPR1L = power / 2;
         }
         
-        rec_value = 0;
-        while (buff[char_pos] != 0 && buff[char_pos] != '&') {
-            char temp = buff[char_pos] - '0';
-            if (temp < 0 || temp > 9) {
-                state = BUFF_ERROR;
-                rec_value = 0;
-                break;
-            }
-            rec_value = rec_value * 10 + temp;
-            ++char_pos;
-        }
-        
-        if (isNegative)
-            rec_value = -rec_value;
-        
-        CCPR1L = rec_value % 256;
+        PIR1bits.ADIF = 0;
+        ADCON0bits.GO = 1;  // start to read A/D converter pin
     }
-    
-    /* buffer overflow */
-    if (char_pos >= BUFF_SIZE) {
-        state = BUFF_OVERFLOW;
-        char_pos = 0;
-    }
-    buff[char_pos] = 0; /* end of word */
-    LATD = LATD ^ 1;
 }
 
 void __interrupt(low_priority) low_isr () {
@@ -130,43 +107,11 @@ void main(void) {
     INTCONbits.GIEH = 1;
     INTCONbits.GIEL = 1;
     
-    /* enable Tx and Rx pin */
-    TRISCbits.RC7 = 1;  // RX
-    TRISCbits.RC6 = 1;  // TX
-    TXSTAbits.TXEN = 1;
-    RCSTAbits.CREN = 1;
-    
-    /* enable Tx and Rx interrupt */
-    RCIE = 1;
-    //TXIE = 1;
-    
-    /*
-     * Oscillator: 500kHz
-     */
-    OSCCON = 0b00111100;
-    
-    /* serial port enable */
-    RCSTAbits.SPEN = 1;
-    
-    /*
-     * BAUD rate
-     */
-    TXSTAbits.SYNC = 0;
-    TXSTAbits.BRGH = 1;
-    BAUDCONbits.BRG16 = 1;
-    SPBRGH = 0;
-    SPBRG = 12;
-    
-    /* variable about receiving message from bluetooth */
-    TRISD = 0;
-    LATD = 1;
-    RCREG = 0;
-    char_pos = 0;
-    state = BUFF_NEW_WORD;
-    rec_value = 0;
+    /* set Fosc = 4MHz */
+    OSCCONbits.IRCF = 0b110;
     
     /* timer2 prescaler 1:16 */
-    T2CON = 0b01111111;
+    T2CON = 0b00000111;
     TMR2 = 0;
     
     /*
@@ -176,19 +121,42 @@ void main(void) {
      */
     CCP1CON = 0b00001100;
     
-    /*
-     * Tosc = 1 / 500 kHz = 2 * 10^-6
-     * PWM = (155 + 1) * 4 * Tosc * prescaler
-     *     = 19.968 ms
-     */
-    PR2 = 155;
+    PR2 = 255;
+    
+    TRISD = 0;
+    LATDbits.LD3 = 0;
+    LATDbits.LD2 = 1;
+    CCPR1L = 40;
     
     /* P1A: RC2 output */
     TRISCbits.RC2 = 0;
     
-    /* motor degree */
-    CCPR1L = 0;
     
+    ADCON1bits.VCFG = 0;    // Vss and Vdd as voltage reference
+    ADCON1bits.PCFG = 0b1110;   // AN0 as A/D ports
+    ADCON0bits.CHS = 0; // select AN0 pin
+    TRISAbits.RA0 = 1;  // RA0 as input
+    TRISC = 0;
+    TRISD = 0;
+    
+    
+    
+    /*
+     * TAD = 64 / 4 MHz = 16 mu second
+     * TACQ = 2.4 mu second
+     * TAD / TACQ = 6.667
+     */
+    ADCON2bits.ADFM = 1; // right justified
+    ADCON2bits.ADCS = 0b110;    // Fosc/64
+    ADCON2bits.ACQT = 0b101;  // 8 Tad
+    
+    /* A/D interrupt */
+    PIR1bits.ADIF = 0;
+    PIE1bits.ADIE = 1;
+    IPR1bits.ADIP = 1;
+    
+    ADCON0bits.ADON = 1;    // enable A/D Converter module
+    ADCON0bits.GO = 1;  // start to read A/D converter pin
     while(1);
     return;
 }
