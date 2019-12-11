@@ -65,6 +65,38 @@
 // CONFIG7H
 #pragma config EBTRB = OFF      // Boot Block Table Read Protection bit (Boot block (000000-0007FFh) not protected from table reads executed in other blocks)
 
+/* 
+ * - (2^10 - 1) = -1023 <= pwm <= 1023 = 2^10 -1
+ * LD3
+ * LD2
+ * 
+ */
+void set_dc_motor (int pwm) {
+    /* pwm == 0 */
+    if (pwm == 0) {
+        LATDbits.LD3 = 0;
+        LATDbits.LD2 = 0;
+        CCPR1L = 0;
+        CCP1CONbits.DC1B = 0;
+        return;
+    }
+    /* pwm > 0 */
+    else if (pwm > 0) {
+        LATDbits.LD3 = 1;
+        LATDbits.LD2 = 0;
+    }
+    /* pwm < 0 */
+    else {
+        pwm = -pwm;
+        LATDbits.LD3 = 0;
+        LATDbits.LD2 = 1;    
+    }
+    if (pwm > 1023)
+        pwm = 1023;
+    
+    CCPR1L = pwm / 4;
+    CCP1CONbits.DC1B = pwm % 4;
+}
 int value;
 int power;
 void __interrupt(high_priority) high_isr () {
@@ -72,26 +104,7 @@ void __interrupt(high_priority) high_isr () {
         value = ADRESL;
         value += ADRESH << 8;
         
-        if (value > 1023) value = 1023;
-        if (value < 0) value = 0;
-        
-        power = value - 511;
-        if (power == 0) {
-            LATDbits.LD3 = 0;
-            LATDbits.LD2 = 0;
-        }
-        else if (power < 0) {
-            LATDbits.LD3 = 0;
-            LATDbits.LD2 = 1;
-            power = -power;
-            
-            CCPR1L = power / 2;
-        }
-        else {
-            LATDbits.LD3 = 1;
-            LATDbits.LD2 = 0;
-            CCPR1L = power / 2;
-        }
+        set_dc_motor(2 * value - 1024);
         
         PIR1bits.ADIF = 0;
         ADCON0bits.GO = 1;  // start to read A/D converter pin
