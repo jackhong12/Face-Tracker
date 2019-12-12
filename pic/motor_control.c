@@ -97,32 +97,97 @@ void set_dc_motor (int pwm) {
     CCPR1L = pwm / 4;
     CCP1CONbits.DC1B = pwm % 4;
 }
-int value;
-int power;
-void __interrupt(high_priority) high_isr () {
-    if (PIE1bits.ADIE && PIR1bits.ADIF) {
-        value = ADRESL;
-        value += ADRESH << 8;
-        
-        set_dc_motor(2 * value - 1024);
-        
-        PIR1bits.ADIF = 0;
-        ADCON0bits.GO = 1;  // start to read A/D converter pin
+
+/*
+ * bluetooth variable
+ */
+#define BUFF_SIZE 20
+#define BUFF_NEW_WORD 0
+#define BUFF_CON_WORD 1
+#define BUFF_OVERFLOW 2
+#define BUFF_ERROR 3
+char buff[BUFF_SIZE];
+int char_pos;
+int state;
+int rec_value;
+
+void receive_from_bluetooth () {
+    while(!PIR1bits.RCIF);
+    /* restart a word */
+    if (state == BUFF_NEW_WORD || state == BUFF_OVERFLOW || state == BUFF_ERROR) {
+        char_pos = 0;
+        state = BUFF_CON_WORD;
     }
+    
+    /* get char from bluetooth */
+    buff[char_pos] = RCREG;
+    
+    /* end character */
+    if (buff[char_pos++] == '&') {
+        state = BUFF_NEW_WORD;
+        char isNegative = 0;
+        char_pos = 0;
+        if (buff[0] == '-') {
+            isNegative = 1;
+            char_pos++;
+        }
+        
+        rec_value = 0;
+        while (buff[char_pos] != 0 && buff[char_pos] != '&') {
+            char temp = buff[char_pos] - '0';
+            if (temp < 0 || temp > 9) {
+                state = BUFF_ERROR;
+                rec_value = 0;
+                break;
+            }
+            rec_value = rec_value * 10 + temp;
+            ++char_pos;
+        }
+        
+        if (isNegative)
+            rec_value = -rec_value;
+        
+        set_dc_motor(rec_value);
+    }
+    
+    /* buffer overflow */
+    if (char_pos >= BUFF_SIZE) {
+        state = BUFF_OVERFLOW;
+        char_pos = 0;
+    }
+    buff[char_pos] = 0; /* end of word */
 }
 
-void __interrupt(low_priority) low_isr () {
+void initial_bluetooth () {
+    /* enable Tx and Rx pin */
+    TRISCbits.RC7 = 1;  // RX
+    TRISCbits.RC6 = 1;  // TX
+    TXSTAbits.TXEN = 1;
+    RCSTAbits.CREN = 1;
+    
+    /* serial port enable */
+    RCSTAbits.SPEN = 1;
+    
+    /*
+     * BAUD rate
+     */
+    TXSTAbits.SYNC = 0;
+    TXSTAbits.BRGH = 1;
+    BAUDCONbits.BRG16 = 0;
+    SPBRGH = 0;
+    SPBRG = 25;
+    
+    /* enable Tx and Rx interrupt */
+    RCIE = 1;
+    //TXIE = 1;
+    
+    /* initial variable */
+    char_pos = 0;
+    state = BUFF_NEW_WORD;
+    rec_value = 0;
 }
 
-void main(void) {
-    /* enable interrupt */
-    RCONbits.IPEN = 1;
-    INTCONbits.GIEH = 1;
-    INTCONbits.GIEL = 1;
-    
-    /* set Fosc = 4MHz */
-    OSCCONbits.IRCF = 0b110;
-    
+void initial_pwm () {
     /* timer2 prescaler 1:16 */
     T2CON = 0b00000111;
     TMR2 = 0;
@@ -136,40 +201,37 @@ void main(void) {
     
     PR2 = 255;
     
-    TRISD = 0;
-    LATDbits.LD3 = 0;
-    LATDbits.LD2 = 1;
-    CCPR1L = 40;
-    
-    /* P1A: RC2 output */
-    TRISCbits.RC2 = 0;
-    
-    
-    ADCON1bits.VCFG = 0;    // Vss and Vdd as voltage reference
-    ADCON1bits.PCFG = 0b1110;   // AN0 as A/D ports
-    ADCON0bits.CHS = 0; // select AN0 pin
-    TRISAbits.RA0 = 1;  // RA0 as input
-    TRISC = 0;
-    TRISD = 0;
-    
-    
-    
     /*
-     * TAD = 64 / 4 MHz = 16 mu second
-     * TACQ = 2.4 mu second
-     * TAD / TACQ = 6.667
+     * INT1 INT2 
      */
-    ADCON2bits.ADFM = 1; // right justified
-    ADCON2bits.ADCS = 0b110;    // Fosc/64
-    ADCON2bits.ACQT = 0b101;  // 8 Tad
+    TRISD = 0;
+    TRISC = 0;
+    LATDbits.LD3 = 0;
+    LATDbits.LD2 = 0;
+    CCPR1L = 0;
+}
+
+void __interrupt(high_priority) high_isr () {
+    if (RCSTAbits.CREN && PIR1bits.RCIF)
+        receive_from_bluetooth();
+}
+
+void __interrupt(low_priority) low_isr () {
+}
+
+
+void main(void) {
+    /* enable interrupt */
+    RCONbits.IPEN = 1;
+    INTCONbits.GIEH = 1;
+    INTCONbits.GIEL = 1;
     
-    /* A/D interrupt */
-    PIR1bits.ADIF = 0;
-    PIE1bits.ADIE = 1;
-    IPR1bits.ADIP = 1;
+    /* set Fosc = 4MHz */
+    OSCCONbits.IRCF = 0b110;
     
-    ADCON0bits.ADON = 1;    // enable A/D Converter module
-    ADCON0bits.GO = 1;  // start to read A/D converter pin
+    initial_pwm();
+    initial_bluetooth();
+    
     while(1);
     return;
 }
