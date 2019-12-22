@@ -75,6 +75,29 @@ void initial_counter () {
     TMR0 = 0;
     TMR1 = 0;
 }
+
+/*
+ * Fosc = 4 MHz
+ * 0.001(s) =  1 KHz / 1MHz
+ * timer3_period = 2 ^ 16 - 1000 = 64536 
+ */
+#define TIMER3_PERIOD 64536
+void initial_timer3 () {
+    T3CONbits.RD16 = 1; /* 16 bits */
+    /* cpature/compare clock source for CCP2 */
+    T3CONbits.T3CCP2 = 0; 
+    T3CONbits.T3CCP1 = 1;
+    T3CONbits.T3CKPS = 0b00;    /* 1:1 prescale value */
+    T3CONbits.TMR3CS = 0;   /* Internal clock (Fosc/4) */
+    T3CONbits.TMR3ON = 1;   /* Timer 3 ON bit */
+    
+    TMR3 = TIMER3_PERIOD;
+    
+    PIR2bits.TMR3IF = 0;
+    IPR2bits.TMR3IP = 1;    /* high priority */
+    PIE2bits.TMR3IE = 1;    /* enable timer3 interrupt */
+}
+
 #define ENCODER_BUFFER_SIZE 5
 unsigned char _encoder_ptr = 0;
 signed int _encoder_degree[ENCODER_BUFFER_SIZE];
@@ -98,13 +121,28 @@ unsigned int get_encoder_velocity () {
 }
 
 volatile signed long deg, gap, temp;
+unsigned int count = 0;
 
+
+void __interrupt(high_priority) high_isr () { 
+    if (PIE2bits.TMR3IE && PIR2bits.TMR3IF) {
+        count++;
+        TMR3 = TIMER3_PERIOD;
+        TMR3IF = 0;
+    }
+}
 
 void main(void) {
-//    T0CON = 0b10111000;
-//    T1CON = 0b11001011;
-    initial_counter();
+    /* enable interrupt */
+    RCONbits.IPEN = 1;
+    INTCONbits.GIEH = 1;
+    INTCONbits.GIEL = 1;
     
+    /* set Fosc = 4MHz */
+    OSCCONbits.IRCF = 0b110;
+    
+    initial_counter();
+    initial_timer3();
     
     while(1) {
         set_encoder_degree();
