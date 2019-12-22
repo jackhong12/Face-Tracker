@@ -1,6 +1,7 @@
 #include <xc.h>
 #include <pic18f4520.h>
 
+
 #pragma config OSC = INTIO67    // Oscillator Selection bits (Internal oscillator block, port function on RA6 and RA7)
 #pragma config FCMEN = OFF      // Fail-Safe Clock Monitor Enable bit (Fail-Safe Clock Monitor disabled)
 #pragma config IESO = OFF       // Internal/External Oscillator Switchover bit (Oscillator Switchover mode disabled)
@@ -62,7 +63,8 @@ void initial_counter () {
     T0CONbits.T08BIT = 0;   /* 16 bits */
     T0CONbits.T0CS = 1; /* T0CKI pin */
     T0CONbits.T0SE = 1; /* high-to-low */
-    T0CONbits.PSA = 0b000;
+    T0CONbits.PSA = 1;  /* don't use prescaler */
+    T0CONbits.T0PS = 0b000;
   
     T1CONbits.RD16 = 1; /* 16 bits */
     T1CONbits.T1RD16 = 1;
