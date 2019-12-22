@@ -8,6 +8,7 @@
 
 #include <xc.h>
 #include <pic18f4520.h>
+#include "./include/pic_setting.h"
 
 #pragma config OSC = INTIO67    // Oscillator Selection bits (Internal oscillator block, port function on RA6 and RA7)
 #pragma config FCMEN = OFF      // Fail-Safe Clock Monitor Enable bit (Fail-Safe Clock Monitor disabled)
@@ -65,38 +66,6 @@
 // CONFIG7H
 #pragma config EBTRB = OFF      // Boot Block Table Read Protection bit (Boot block (000000-0007FFh) not protected from table reads executed in other blocks)
 
-/* 
- * - (2^10 - 1) = -1023 <= pwm <= 1023 = 2^10 -1
- * LD3
- * LD2
- * 
- */
-void set_dc_motor (int pwm) {
-    /* pwm == 0 */
-    if (pwm == 0) {
-        LATDbits.LD3 = 0;
-        LATDbits.LD2 = 0;
-        CCPR1L = 0;
-        CCP1CONbits.DC1B = 0;
-        return;
-    }
-    /* pwm > 0 */
-    else if (pwm > 0) {
-        LATDbits.LD3 = 1;
-        LATDbits.LD2 = 0;
-    }
-    /* pwm < 0 */
-    else {
-        pwm = -pwm;
-        LATDbits.LD3 = 0;
-        LATDbits.LD2 = 1;    
-    }
-    if (pwm > 1023)
-        pwm = 1023;
-    
-    CCPR1L = pwm / 4;
-    CCP1CONbits.DC1B = pwm % 4;
-}
 
 /*
  * bluetooth variable
@@ -187,30 +156,6 @@ void initial_bluetooth () {
     rec_value = 0;
 }
 
-void initial_pwm () {
-    /* timer2 prescaler 1:16 */
-    T2CON = 0b00000111;
-    TMR2 = 0;
-    
-    /*
-     * single output P1A
-     * DC1B : 0 0
-     * PWM mode P1A, P1C active-high
-     */
-    CCP1CON = 0b00001100;
-    
-    PR2 = 255;
-    
-    /*
-     * INT1 INT2 
-     */
-    TRISD = 0;
-    TRISC = 0;
-    LATDbits.LD3 = 0;
-    LATDbits.LD2 = 0;
-    CCPR1L = 0;
-}
-
 void __interrupt(high_priority) high_isr () {
     if (RCSTAbits.CREN && PIR1bits.RCIF)
         receive_from_bluetooth();
@@ -219,7 +164,7 @@ void __interrupt(high_priority) high_isr () {
 void __interrupt(low_priority) low_isr () {
 }
 
-
+signed int temp = 0;
 void main(void) {
     /* enable interrupt */
     RCONbits.IPEN = 1;
@@ -231,7 +176,10 @@ void main(void) {
     
     initial_pwm();
     initial_bluetooth();
+    initial_counter();
     
-    while(1);
+    while(1) {
+        set_encoder_degree();
+    }
     return;
 }
