@@ -22,6 +22,9 @@ void initial_timer3 () {
 /*============================================================================
  * Counter 
  *============================================================================*/
+unsigned char _encoder_ptr = 0;
+signed int _encoder_degree[ENCODER_BUFFER_SIZE];
+
 void initial_counter () {
     T0CONbits.TMR0ON = 1;
     T0CONbits.T08BIT = 0;   /* 16 bits */
@@ -41,10 +44,9 @@ void initial_counter () {
     
     TMR0 = 0;
     TMR1 = 0;
+    for (int i = 0; i < ENCODER_BUFFER_SIZE; i++)
+        _encoder_degree[i] = 0;
 }
-
-unsigned char _encoder_ptr = 0;
-signed int _encoder_degree[ENCODER_BUFFER_SIZE];
 
 void set_encoder_degree () {
     ++_encoder_ptr;
@@ -58,6 +60,13 @@ unsigned int get_encoder_degree () {
 }
 
 unsigned int get_encoder_velocity () {
+    unsigned char pre_encoder_ptr = _encoder_ptr - ENCODER_CONTORL_SIZE;
+    if (pre_encoder_ptr < 0)
+        pre_encoder_ptr += ENCODER_BUFFER_SIZE;
+    return _encoder_degree[_encoder_ptr] - _encoder_degree[pre_encoder_ptr];
+}
+
+unsigned int get_encoder_avg_velocity () {
     unsigned char pre_encoder_ptr = _encoder_ptr + 1;
     if (pre_encoder_ptr >= ENCODER_BUFFER_SIZE)
         pre_encoder_ptr = 0;
@@ -128,3 +137,32 @@ void set_dc_motor (int pwm) {
 /*============================================================================
  * 
  *============================================================================*/
+void initial_buad () {
+    /* enable Tx and Rx pin */
+    TRISCbits.RC7 = 1;  // RX
+    TRISCbits.RC6 = 1;  // TX
+    TXSTAbits.TXEN = 1;
+    RCSTAbits.CREN = 1;
+    
+    /* serial port enable */
+    RCSTAbits.SPEN = 1;
+    
+    /*
+     * BAUD rate
+     */
+    TXSTAbits.SYNC = 0;
+    TXSTAbits.BRGH = 1;
+    BAUDCONbits.BRG16 = 0;
+    SPBRGH = 0;
+    SPBRG = 25;
+    
+    /* enable Tx and Rx interrupt */
+    RCIE = 1;
+}
+
+void send_char (char one_char) {
+    if (!TXSTAbits.TXEN)
+        return;
+    while (!PIR1bits.TXIF);
+    TXREG = one_char;
+}
