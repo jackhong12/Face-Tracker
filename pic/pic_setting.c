@@ -60,7 +60,7 @@ unsigned int get_encoder_degree () {
 }
 
 unsigned int get_encoder_velocity () {
-    unsigned char pre_encoder_ptr = _encoder_ptr - ENCODER_CONTORL_SIZE;
+    signed char pre_encoder_ptr = _encoder_ptr - ENCODER_CONTORL_SIZE;
     if (pre_encoder_ptr < 0)
         pre_encoder_ptr += ENCODER_BUFFER_SIZE;
     return _encoder_degree[_encoder_ptr] - _encoder_degree[pre_encoder_ptr];

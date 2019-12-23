@@ -71,8 +71,8 @@
  *     For calculating velocity.
  *     v = (position[t] - position[t - size]) / (size * timer_period)
  */
-#define ENCODER_BUFFER_SIZE 10
-#define ENCODER_CONTORL_SIZE 9
+#define ENCODER_BUFFER_SIZE 50
+#define ENCODER_CONTORL_SIZE 10
 void initial_counter(void);
 void set_encoder_degree(void);
 unsigned int get_encoder_degree(void);
