@@ -2,24 +2,40 @@
 #include <pic18f4520.h>
 #include "pic_setting.h"
 
-signed int position, target_position = 10;
+signed int position, target_position = 10, velocity, target_velocity = 10;
 #define P_GAIN 128
 #define I_GAIN 2
 #define D_GAIN 0
 signed long integrator = 0;
-signed int pre_error = 0;
+signed int pre_vel_error = 0;
 
 void pid () {
-    position = get_encoder_velocity();
-    signed int value, error = target_position - position;
-    integrator += error;
-    value = P_GAIN * error + I_GAIN * integrator + D_GAIN * (error - pre_error);
+    signed int value, vel_error;
+    
+    /* velocity gap */
+    if (target_velocity == 0) {
+        set_dc_motor(0);
+        return;
+    }
+    else if (target_velocity > 20)
+        target_velocity = 20;
+    else if (target_velocity < -20)
+        target_velocity = -20;
+    
+    /* velocity control */
+    velocity = get_encoder_velocity();
+    vel_error = target_velocity - velocity;
+    integrator += vel_error;
+    value = P_GAIN * vel_error + I_GAIN * integrator + D_GAIN * (vel_error - pre_vel_error);
+    
+    /* friction compensation */
     if (value > 0)
         value += 200;
     else
         value -= 200;
+    
     set_dc_motor(value);
-    pre_error = error;
+    pre_vel_error = vel_error;
 }
 
 void __interrupt(high_priority) high_isr () { 
@@ -36,7 +52,7 @@ void __interrupt(low_priority) low_isr () {
         
         /* new desired input */
         if (isNewInput()) {
-            target_position = get_receive_value(); 
+            target_velocity = get_receive_value(); 
         }
         
         pid();
