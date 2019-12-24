@@ -2,7 +2,7 @@ import serial
 from datetime import datetime
 import time
 start_time = time.time()
-with serial.Serial('/dev/ttyUSB0', 9600) as ser:
+with serial.Serial('/dev/ttyUSB0', 19200) as ser:
     while True:
         line = ser.readline()
         now_time = time.time()

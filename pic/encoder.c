@@ -2,9 +2,9 @@
 #include <pic18f4520.h>
 #include "pic_setting.h"
 
-signed int position, target_position = 3;
+signed int position, target_position = 4;
 #define P_GAIN 128
-#define I_GAIN 1
+#define I_GAIN 2
 #define D_GAIN 0
 signed long integrator = 0;
 signed int pre_error = 0;
@@ -44,8 +44,7 @@ void __interrupt(high_priority) high_isr () {
         TMR3IF = 0;
         set_encoder_degree();
         pid();
-        signed int v = get_encoder_avg_velocity();
-        //send_int(v);
+
     }
 }
 
@@ -67,7 +66,8 @@ void main(void) {
     signed int v = get_encoder_avg_velocity();
     send_int(v);
     while(1) {
-        
+        signed int v = get_encoder_velocity();
+        send_b7_int(v);
     }
     return;
 }

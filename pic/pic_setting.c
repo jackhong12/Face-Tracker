@@ -154,7 +154,7 @@ void initial_buad () {
     TXSTAbits.BRGH = 1;
     BAUDCONbits.BRG16 = 0;
     SPBRGH = 0;
-    SPBRG = 25;
+    SPBRG = 12;
     
     /* enable Tx and Rx interrupt */
     RCIE = 1;
