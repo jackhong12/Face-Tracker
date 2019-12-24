@@ -135,7 +135,7 @@ void set_dc_motor (int pwm) {
 }
 
 /*============================================================================
- * 
+ * USART
  *============================================================================*/
 void initial_buad () {
     /* enable Tx and Rx pin */
@@ -165,4 +165,26 @@ void send_char (char one_char) {
         return;
     while (!PIR1bits.TXIF);
     TXREG = one_char;
+}
+
+/*
+ * Send a char
+ *     - first upper bit: stop bit
+ *     - other 7 bits: data bits
+ */
+void send_b7_int (signed int value) {
+    signed int middle;
+    char send_byte;
+
+    send_byte = value >> 14;
+    send_byte = send_byte & B7_INT_MASK_UP;
+    send_char(send_byte);
+    
+    middle = value & B7_INT_MASK_MIDDLE;
+    send_byte = middle >> 7;
+    send_char(send_byte);
+    
+    send_byte = value;
+    send_byte = send_byte | STOP_BIT;
+    send_char(send_byte);
 }
