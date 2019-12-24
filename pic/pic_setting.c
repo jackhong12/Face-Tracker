@@ -15,7 +15,7 @@ void initial_timer3 () {
     TMR3 = TIMER3_PERIOD;
     
     PIR2bits.TMR3IF = 0;
-    IPR2bits.TMR3IP = 1;    /* high priority */
+    IPR2bits.TMR3IP = 0;    /* low priority */
     PIE2bits.TMR3IE = 1;    /* enable timer3 interrupt */
 }
 
@@ -187,4 +187,45 @@ void send_b7_int (signed int value) {
     send_byte = value;
     send_byte = send_byte | STOP_BIT;
     send_char(send_byte);
+}
+
+char _receive_num = 0, _isNewInt = 0;
+signed int _receive_temp = 0, _receive_value;
+void receive_b7_int () {
+    if (!PIR1bits.RC1IF)
+        return;
+    
+    char get_char = RCREG;
+    ++_receive_num;
+    
+    /* stop bit */
+    if (get_char & STOP_BIT) {
+        /* receive error */
+        if (_receive_num != RECEIVE_SIZE) {
+            _receive_num = 0;
+            _receive_temp = 0;
+            return;
+        }
+        
+        /* new value */
+        get_char = get_char & 0x7F;
+        _receive_temp += get_char;
+        _receive_value = _receive_temp;
+        _receive_temp = 0;
+        _receive_num = 0;
+        _isNewInt = 1;
+        return;
+    }
+    
+    _receive_temp += get_char;
+    _receive_temp = _receive_temp << 7;
+}
+
+char isNewInput () {
+    return _isNewInt;
+}
+
+signed int get_receive_value () {
+    _isNewInt = 0;
+    return _receive_value;
 }

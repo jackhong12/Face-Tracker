@@ -105,7 +105,11 @@ void set_dc_motor(int pwm); /* -1023 <= pwm <= 1023 */
 #define B7_INT_MASK_UP 0x03
 #define B7_INT_MASK_MIDDLE  0x3F80
 #define STOP_BIT 0x80
+#define RECEIVE_SIZE 3
 void initial_buad ();
 void send_char (char one_char);
 void send_b7_int (signed int value);
+void receive_b7_int (void);
+char isNewInput (void);
+signed int get_receive_value (void);
 #endif
